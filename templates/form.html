@@ -3,16 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Formulário Flask</title>
+    <title>Lista de Presenças do Kevin</title>
+    <style>
+        .strikethrough {
+            text-decoration: line-through;
+        }
+    </style>
 </head>
 <body>
-    <h1>Formulário Simples</h1>
+    <h1>Lista de Presenças do Kevin</h1>
     <form method="POST">
         <label for="name">Nome:</label>
         <input type="text" id="name" name="name" required>
         <br><br>
-        <label for="email">Email:</label>
-        <input type="email" id="email" name="email" required>
+        <label for="faltas">Quantas faltas você quer me dar:</label>
+        <input type="number" id="faltas" name="faltas" min="0" max="11" required>
         <br><br>
         <input type="submit" value="Enviar">
     </form>
@@ -21,7 +26,13 @@
     <h2>Informações Submetidas:</h2>
     <ul>
         {% for entry in entries %}
-        <li>Nome: {{ entry.name }}, Email: {{ entry.email }}</li>
+        <li>Nome: {{ entry.name }}, Faltas: 
+            {% if entry.faltas == '11' %}
+            <span class="strikethrough">11</span> 10 - obrigado S2
+            {% else %}
+            {{ entry.faltas }} - obrigado ;)
+            {% endif %}
+        </li>
         {% endfor %}
     </ul>
     {% endif %}

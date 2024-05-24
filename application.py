@@ -7,21 +7,21 @@ import logging
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
 
-app = Flask(__name__, template_folder= 'templates'  )
+application = Flask(__name__, template_folder='templates')
 
 # Configurar boto3 para se conectar ao DynamoDB
-dynamodb = boto3.resource('dynamodb', region_name = 'us-east-2')
+dynamodb = boto3.resource('dynamodb', region_name='us-east-2')
 table = dynamodb.Table('DBTable')
 
-@app.route('/', methods=['GET', 'POST'])
+@application.route('/', methods=['GET', 'POST'])
 def form():
     name = None
-    email = None
+    faltas = None
     all_entries = []
 
     if request.method == 'POST':
         name = request.form.get('name')
-        email = request.form.get('email')
+        faltas = request.form.get('faltas')
 
         # Gerar um UUID para o item
         item_id = str(uuid.uuid4())
@@ -32,7 +32,7 @@ def form():
                 Item={
                     'id': item_id,
                     'name': name,
-                    'email': email
+                    'faltas': faltas
                 }
             )
             logging.info("Dados inseridos com sucesso no DynamoDB")
@@ -48,7 +48,7 @@ def form():
         logging.error(e)
         return "Erro ao recuperar dados do DynamoDB", 500
 
-    return render_template('form.html', name=name, email=email, entries=all_entries)
+    return render_template('form.html', name=name, faltas=faltas, entries=all_entries)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=80, host='0.0.0.0')
+    application.run(debug=True, port=80, host='0.0.0.0')
