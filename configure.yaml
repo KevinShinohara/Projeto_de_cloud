@@ -46,19 +46,19 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref mainInternetGateway
 
-  Associacaosubrede1:
+  Associasubrede1:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref subrede1
       RouteTableId: !Ref PublicRouteTable
 
-  Associacaosubrede2:
+  Associasubrede2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref subrede2
       RouteTableId: !Ref PublicRouteTable
 
-  GrupoSegurancaALB:
+  segurancaALB:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for ALB
@@ -82,7 +82,7 @@ Resources:
         - !Ref subrede1
         - !Ref subrede2
       SecurityGroups:
-        - !Ref GrupoSegurancaALB
+        - !Ref segurancaALB
       Scheme: internet-facing
       Tags:
         - Key: Name
@@ -120,7 +120,7 @@ Resources:
       KeyName: !Ref KeyName
       SecurityGroups:
         - !Ref GrupoSegurancaInstancia
-        - !Ref GrupoSegurancaALB
+        - !Ref segurancaALB
       IamInstanceProfile: !Ref PerfilAcessoDynamoDB
       UserData:
         Fn::Base64: |
@@ -204,10 +204,10 @@ Resources:
       UnhealthyThresholdCount: 2
       VpcId: !Ref mainVPC
 
-  TabelaDynamoDB:
+  DBTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: TabelaDynamoDB
+      TableName: DBTable
       AttributeDefinitions:
         - AttributeName: id
           AttributeType: S
@@ -257,7 +257,7 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !GetAtt TabelaDynamoDB.Arn
+                Resource: !GetAtt DBTable.Arn
 
   PerfilAcessoDynamoDB:
     Type: AWS::IAM::InstanceProfile
