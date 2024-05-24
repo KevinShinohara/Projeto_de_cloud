@@ -11,7 +11,7 @@ app = Flask(__name__, template_folder= 'templates'  )
 
 # Configurar boto3 para se conectar ao DynamoDB
 dynamodb = boto3.resource('dynamodb', region_name = 'us-east-2')
-table = dynamodb.Table('TabelaDynamoDB')
+table = dynamodb.Table('DBTable')
 
 @app.route('/', methods=['GET', 'POST'])
 def form():
