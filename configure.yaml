@@ -1,0 +1,282 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Projeto Computação em nuvem - Cloudformation
+
+Parameters:
+  KeyName:
+    Type: String
+    Description: chavito
+
+Resources:
+  mainVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+
+  mainInternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  ConexaoGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref mainVPC
+      InternetGatewayId: !Ref mainInternetGateway
+
+  sub-rede1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref mainVPC
+      AvailabilityZone: us-east-2a
+      CidrBlock: "10.0.3.0/24"
+      MapPublicIpOnLaunch: true
+  
+  sub-rede2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref mainVPC
+      AvailabilityZone: us-east-2b
+      CidrBlock: "10.0.5.0/24"
+      MapPublicIpOnLaunch: true
+
+
+  RotaPublica:
+    Type: AWS::EC2::Route
+    DependsOn: ConexaoGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref mainInternetGateway
+
+  Associacaosub-rede1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref sub-rede1
+      RouteTableId: !Ref PublicRouteTable
+
+  Associacaosub-rede2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref sub-rede2
+      RouteTableId: !Ref PublicRouteTable
+
+  GrupoSegurancaALB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ALB
+      VpcId: !Ref mainVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+  
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref mainVPC
+
+  ALBPrincipal:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: ALBPrincipal
+      Subnets: 
+        - !Ref sub-rede1
+        - !Ref sub-rede2
+      SecurityGroups:
+        - !Ref GrupoSegurancaALB
+      Scheme: internet-facing
+      Tags:
+        - Key: Name
+          Value: ALBPrincipal
+  
+  GrupoSegurancaInstancia:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: launch-wizard
+      GroupDescription: launch-wizard created
+      VpcId: !Ref mainVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          CidrIp: 0.0.0.0/0
+
+  ConfiguracaoLancamento:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-0f30a9c3a48f3fa79
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref GrupoSegurancaInstancia
+        - !Ref GrupoSegurancaALB
+      IamInstanceProfile: !Ref PerfilAcessoDynamoDB
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          sudo apt-get update -y
+          sudo apt-get install -y python3-pip git
+          sudo pip3 install flask boto3
+          sudo mkdir /opt/aplication
+          sudo git clone https://github.com/KevinShinohara/Projeto_de_cloud.git/opt/app
+          nohup python3 /opt/aplication/app.py > /var/log/app.log 2>&1 &
+
+  GrupoAutoScaling:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones: [us-east-2a, us-east-2b]
+      LaunchConfigurationName: !Ref ConfiguracaoLancamento
+      MinSize: 2
+      MaxSize: 7
+      DesiredCapacity: 3
+      VPCZoneIdentifier:
+        - !Ref sub-rede1
+        - !Ref sub-rede2
+      TargetGroupARNs:
+        - !Ref GrupoAlvo  
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
+      Tags:
+        - Key: Name
+          Value: GrupoAutoScaling
+          PropagateAtLaunch: true
+
+  PoliticaEscalonamento:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref GrupoAutoScaling
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        TargetValue: 70.0  
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+  
+  AlarmeCPU:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "Alarme de utilização da CPU excedendo 70%"
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref GrupoAutoScaling
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 70
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref PoliticaEscalonamento
+
+  ListenerALB:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref GrupoAlvo
+      LoadBalancerArn: !Ref ALBPrincipal
+      Port: 80
+      Protocol: HTTP
+
+  GrupoAlvo:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      Name: GrupoAlvo
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref mainVPC
+
+  TabelaDynamoDB:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: TabelaDynamoDB
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  GrupoSegurancaDynamoDB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for DynamoDB
+      VpcId: !Ref mainVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref GrupoSegurancaInstancia
+
+  RoleAcessoDynamoDB:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DynamoDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Scan
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:BatchGetItem
+                  - dynamodb:Query
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt TabelaDynamoDB.Arn
+
+  PerfilAcessoDynamoDB:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref RoleAcessoDynamoDB]
+
+  VPCEndpointDynamoDB:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: com.amazonaws.us-east-2.dynamodb
+      VpcId: !Ref mainVPC
+      RouteTableIds:
+        - !Ref PublicRouteTable
+      VpcEndpointType: Gateway
+
+Outputs:
+  GrupoAutoScalingId:
+    Description: "ID do Grupo de Auto Scaling"
+    Value: !Ref GrupoAutoScaling
+  ALBDNSName:
+    Description: "DNS Name of the ALB"
+    Value: !GetAtt ALBPrincipal.DNSName

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulário Flask</title>
+</head>
+<body>
+    <h1>Formulário Simples</h1>
+    <form method="POST">
+        <label for="name">Nome:</label>
+        <input type="text" id="name" name="name" required>
+        <br><br>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required>
+        <br><br>
+        <input type="submit" value="Enviar">
+    </form>
+
+    {% if entries %}
+    <h2>Informações Submetidas:</h2>
+    <ul>
+        {% for entry in entries %}
+        <li>Nome: {{ entry.name }}, Email: {{ entry.email }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</body>
+</html>
