@@ -15,13 +15,13 @@ Resources:
   mainInternetGateway:
     Type: AWS::EC2::InternetGateway
 
-  ConexaoGateway:
+  ligandoGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref mainVPC
       InternetGatewayId: !Ref mainInternetGateway
 
-  subrede1:
+  subredePrimaria:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref mainVPC
@@ -29,7 +29,7 @@ Resources:
       CidrBlock: "10.0.3.0/24"
       MapPublicIpOnLaunch: true
   
-  subrede2:
+  subredeSecundaria:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref mainVPC
@@ -40,22 +40,22 @@ Resources:
 
   RotaPublica:
     Type: AWS::EC2::Route
-    DependsOn: ConexaoGateway
+    DependsOn: ligandoGateway
     Properties:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref mainInternetGateway
 
-  Associasubrede1:
+  AssociasubredePrimaria:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref subrede1
+      SubnetId: !Ref subredePrimaria
       RouteTableId: !Ref PublicRouteTable
 
-  Associasubrede2:
+  AssociasubredeSecundaria:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref subrede2
+      SubnetId: !Ref subredeSecundaria
       RouteTableId: !Ref PublicRouteTable
 
   segurancaALB:
@@ -74,21 +74,21 @@ Resources:
     Properties:
       VpcId: !Ref mainVPC
 
-  ALBPrincipal:
+  mainALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: ALBPrincipal
+      Name: mainALB
       Subnets: 
-        - !Ref subrede1
-        - !Ref subrede2
+        - !Ref subredePrimaria
+        - !Ref subredeSecundaria
       SecurityGroups:
         - !Ref segurancaALB
       Scheme: internet-facing
       Tags:
         - Key: Name
-          Value: ALBPrincipal
+          Value: mainALB
   
-  GrupoSegurancaInstancia:
+  segurancaInstancia:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: launch-wizard
@@ -112,16 +112,16 @@ Resources:
           ToPort: 5000
           CidrIp: 0.0.0.0/0
 
-  ConfiguracaoLancamento:
+  lancamentoConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
       ImageId: ami-0f30a9c3a48f3fa79
       InstanceType: t2.micro
       KeyName: !Ref KeyName
       SecurityGroups:
-        - !Ref GrupoSegurancaInstancia
+        - !Ref segurancaInstancia
         - !Ref segurancaALB
-      IamInstanceProfile: !Ref PerfilAcessoDynamoDB
+      IamInstanceProfile: !Ref AcessoDB
       UserData:
         Fn::Base64: |
           #!/bin/bash
@@ -132,37 +132,37 @@ Resources:
           sudo git clone https://github.com/KevinShinohara/Projeto_de_cloud.git/opt/app
           nohup python3 /opt/aplication/app.py > /var/log/app.log 2>&1 &
 
-  GrupoAutoScaling:
+  groupAutoScaling:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AvailabilityZones: [us-east-2a, us-east-2b]
-      LaunchConfigurationName: !Ref ConfiguracaoLancamento
+      LaunchConfigurationName: !Ref lancamentoConfig
       MinSize: 2
       MaxSize: 7
       DesiredCapacity: 3
       VPCZoneIdentifier:
-        - !Ref subrede1
-        - !Ref subrede2
+        - !Ref subredePrimaria
+        - !Ref subredeSecundaria
       TargetGroupARNs:
-        - !Ref GrupoAlvo  
+        - !Ref Target  
       HealthCheckType: ELB
       HealthCheckGracePeriod: 300
       Tags:
         - Key: Name
-          Value: GrupoAutoScaling
+          Value: groupAutoScaling
           PropagateAtLaunch: true
 
-  PoliticaEscalonamento:
+  RegrasEscalonamento:
     Type: AWS::AutoScaling::ScalingPolicy
     Properties:
-      AutoScalingGroupName: !Ref GrupoAutoScaling
+      AutoScalingGroupName: !Ref groupAutoScaling
       PolicyType: TargetTrackingScaling
       TargetTrackingConfiguration:
         TargetValue: 70.0  
         PredefinedMetricSpecification:
           PredefinedMetricType: ASGAverageCPUUtilization
   
-  AlarmeCPU:
+  alarmCPU:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmDescription: "Alarme de utilização da CPU excedendo 70%"
@@ -170,26 +170,26 @@ Resources:
       MetricName: CPUUtilization
       Dimensions:
         - Name: AutoScalingGroupName
-          Value: !Ref GrupoAutoScaling
+          Value: !Ref groupAutoScaling
       Statistic: Average
       Period: 60
       EvaluationPeriods: 5
       Threshold: 70
       ComparisonOperator: GreaterThanOrEqualToThreshold
       AlarmActions:
-        - !Ref PoliticaEscalonamento
+        - !Ref RegrasEscalonamento
 
-  ListenerALB:
+  kevinALB:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref GrupoAlvo
-      LoadBalancerArn: !Ref ALBPrincipal
+          TargetGroupArn: !Ref Target
+      LoadBalancerArn: !Ref mainALB
       Port: 80
       Protocol: HTTP
 
-  GrupoAlvo:
+  Target:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 30
@@ -197,7 +197,7 @@ Resources:
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 10
       HealthyThresholdCount: 2
-      Name: GrupoAlvo
+      Name: Target
       Port: 80
       Protocol: HTTP
       TargetType: instance
@@ -218,7 +218,7 @@ Resources:
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
 
-  GrupoSegurancaDynamoDB:
+  segurancaDynamoDB:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for DynamoDB
@@ -227,9 +227,9 @@ Resources:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          SourceSecurityGroupId: !Ref GrupoSegurancaInstancia
+          SourceSecurityGroupId: !Ref segurancaInstancia
 
-  RoleAcessoDynamoDB:
+  roleAcessoDB:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -259,12 +259,12 @@ Resources:
                   - logs:PutLogEvents
                 Resource: !GetAtt DBTable.Arn
 
-  PerfilAcessoDynamoDB:
+  AcessoDB:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      Roles: [!Ref RoleAcessoDynamoDB]
+      Roles: [!Ref roleAcessoDB]
 
-  VPCEndpointDynamoDB:
+  VPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       ServiceName: com.amazonaws.us-east-2.dynamodb
@@ -274,9 +274,9 @@ Resources:
       VpcEndpointType: Gateway
 
 Outputs:
-  GrupoAutoScalingId:
+  groupAutoScalingId:
     Description: "ID do Grupo de Auto Scaling"
-    Value: !Ref GrupoAutoScaling
+    Value: !Ref groupAutoScaling
   ALBDNSName:
     Description: "DNS Name of the ALB"
-    Value: !GetAtt ALBPrincipal.DNSName
+    Value: !GetAtt mainALB.DNSName
