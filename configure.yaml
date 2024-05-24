@@ -129,8 +129,8 @@ Resources:
           sudo apt-get install -y python3-pip git
           sudo pip3 install flask boto3
           sudo mkdir /opt/application
-          sudo git clone https://github.com/KevinShinohara/Projeto_de_cloud.git/opt/app
-          nohup python3 /opt/application/app.py > /var/log/app.log 2>&1 &
+          sudo git clone https://github.com/KevinShinohara/Projeto_de_cloud.git /opt/application
+          nohup python3 /opt/application/application.py > /var/log/application.log 2>&1 &
 
   groupAutoScaling:
     Type: AWS::AutoScaling::AutoScalingGroup
