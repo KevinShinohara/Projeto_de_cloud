@@ -21,7 +21,7 @@ Resources:
       VpcId: !Ref mainVPC
       InternetGatewayId: !Ref mainInternetGateway
 
-  sub-rede1:
+  subrede1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref mainVPC
@@ -29,7 +29,7 @@ Resources:
       CidrBlock: "10.0.3.0/24"
       MapPublicIpOnLaunch: true
   
-  sub-rede2:
+  subrede2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref mainVPC
@@ -46,16 +46,16 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref mainInternetGateway
 
-  Associacaosub-rede1:
+  Associacaosubrede1:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref sub-rede1
+      SubnetId: !Ref subrede1
       RouteTableId: !Ref PublicRouteTable
 
-  Associacaosub-rede2:
+  Associacaosubrede2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref sub-rede2
+      SubnetId: !Ref subrede2
       RouteTableId: !Ref PublicRouteTable
 
   GrupoSegurancaALB:
@@ -79,8 +79,8 @@ Resources:
     Properties:
       Name: ALBPrincipal
       Subnets: 
-        - !Ref sub-rede1
-        - !Ref sub-rede2
+        - !Ref subrede1
+        - !Ref subrede2
       SecurityGroups:
         - !Ref GrupoSegurancaALB
       Scheme: internet-facing
@@ -141,8 +141,8 @@ Resources:
       MaxSize: 7
       DesiredCapacity: 3
       VPCZoneIdentifier:
-        - !Ref sub-rede1
-        - !Ref sub-rede2
+        - !Ref subrede1
+        - !Ref subrede2
       TargetGroupARNs:
         - !Ref GrupoAlvo  
       HealthCheckType: ELB
